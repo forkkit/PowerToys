@@ -1,6 +1,7 @@
 #pragma once
 
 #define ZONE_STAMP L"FancyZones_zone"
+#include <common/settings_objects.h>
 
 struct Settings
 {
@@ -13,7 +14,9 @@ struct Settings
     bool overrideSnapHotkeys = false;
     bool appLastZone_moveWindows = false;
     bool use_standalone_editor = true;
+    bool use_cursorpos_editor_startupscreen = true;
     std::wstring zoneHightlightColor = L"#0078D7";
+    PowerToysSettings::HotkeyObject editorHotkey = PowerToysSettings::HotkeyObject::from_settings(true, false, false, false, VK_OEM_3, L"~");
 };
 
 interface __declspec(uuid("{BA4E77C4-6F44-4C5D-93D3-CBDE880495C2}")) IFancyZonesSettings : public IUnknown

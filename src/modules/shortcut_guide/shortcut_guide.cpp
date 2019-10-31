@@ -47,6 +47,13 @@ bool OverlayWindow::get_config(wchar_t* buffer, int *buffer_size) {
     1
   );
 
+  settings.add_choice_group(
+    theme.name,
+    theme.resourceId,
+    theme.value,
+    theme.keys_and_texts
+  );
+
   return settings.serialize_to_buffer(buffer, buffer_size);
 }
 
@@ -68,7 +75,12 @@ void OverlayWindow::set_config(const wchar_t * config) {
         winkey_popup->apply_overlay_opacity(((float)overlayOpacity.value) / 100.0f);
       }
     }
+    if (_values.is_string_value(theme.name)) {
+      theme.value = _values.get_string_value(theme.name);
+      winkey_popup->set_theme(theme.value);
+    }
     _values.save_to_settings_file();
+    Trace::SettingsChanged(pressTime.value, overlayOpacity.value, theme.value);
   }
   catch (std::exception&) {
     // Improper JSON.
@@ -77,16 +89,21 @@ void OverlayWindow::set_config(const wchar_t * config) {
 
 void OverlayWindow::enable() {
   if (!_enabled) {
+    Trace::EnableShortcutGuide(true);
     winkey_popup = new D2DOverlayWindow();
     winkey_popup->apply_overlay_opacity(((float)overlayOpacity.value)/100.0f);
+    winkey_popup->set_theme(theme.value);
     target_state = new TargetState(pressTime.value);
     winkey_popup->initialize();
   }
   _enabled = true;
 }
 
-void OverlayWindow::disable() {
+void OverlayWindow::disable(bool trace_event) {
   if (_enabled) {
+    if (trace_event) {
+      Trace::EnableShortcutGuide(false);
+    }
     winkey_popup->hide();
     target_state->exit();
     delete target_state;
@@ -95,6 +112,10 @@ void OverlayWindow::disable() {
     winkey_popup = nullptr;
   }
   _enabled = false;
+}
+
+void OverlayWindow::disable() {
+  this->disable(true);
 }
 
 bool OverlayWindow::is_enabled() {
@@ -130,6 +151,7 @@ void OverlayWindow::was_hidden() {
 }
 
 void OverlayWindow::destroy() {
+  this->disable(false);
   delete this;
   instance = nullptr;
 }
@@ -143,6 +165,9 @@ void OverlayWindow::init_settings() {
     }
     if (settings.is_int_value(overlayOpacity.name)) {
       overlayOpacity.value = settings.get_int_value(overlayOpacity.name);
+    }
+    if (settings.is_string_value(theme.name)) {
+      theme.value = settings.get_string_value(theme.name);
     }
   }
   catch (std::exception&) {

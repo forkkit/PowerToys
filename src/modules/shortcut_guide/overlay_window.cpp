@@ -180,14 +180,17 @@ void D2DOverlayWindow::show(HWND active_window) {
   tasklist_buttons.clear();
   this->active_window = active_window;
   auto old_bck = colors.start_color_menu;
-  if (initialized && colors.update()) {
+  auto colors_updated = colors.update();
+  auto new_light_mode = (theme_setting == Light) || (theme_setting == System && colors.light_mode);
+  if (initialized && (colors_updated || light_mode != new_light_mode)) {
     // update background colors
     landscape.recolor(old_bck, colors.start_color_menu);
     portrait.recolor(old_bck, colors.start_color_menu);
     for (auto& arrow : arrows) {
       arrow.recolor(old_bck, colors.start_color_menu);
     }
-    if (colors.light_mode) {
+    light_mode = new_light_mode;
+    if (light_mode) {
       landscape.recolor(0xDDDDDD, 0x222222);
       portrait.recolor(0xDDDDDD, 0x222222);
       for (auto& arrow : arrows) {
@@ -237,7 +240,6 @@ void D2DOverlayWindow::show(HWND active_window) {
     tasklist_cv_mutex.unlock();
     tasklist_cv.notify_one();
   }
-  Trace::EventShow();
 }
 
 void D2DOverlayWindow::animate(int vk_code) {
@@ -347,7 +349,11 @@ void D2DOverlayWindow::on_hide() {
     DwmUnregisterThumbnail(thumbnail);
   }
   std::chrono::steady_clock::time_point shown_end_time = std::chrono::steady_clock::now();
-  Trace::EventHide(std::chrono::duration_cast<std::chrono::milliseconds>(shown_end_time - shown_start_time).count(), key_pressed);
+  // Trace the event only if the overaly window was visible.
+  if (shown_start_time.time_since_epoch().count() > 0) {
+    Trace::HideGuide(std::chrono::duration_cast<std::chrono::milliseconds>(shown_end_time - shown_start_time).count(), key_pressed);
+    shown_start_time = {};
+  }
   key_pressed.clear();
 }
 
@@ -367,6 +373,16 @@ void D2DOverlayWindow::apply_overlay_opacity(float opacity) {
     opacity = 1.0f;
   }
   overlay_opacity = opacity;
+}
+
+void D2DOverlayWindow::set_theme(const std::wstring& theme) {
+  if (theme == L"light") {
+    theme_setting = Light;
+  } else if (theme == L"dark") {
+    theme_setting = Dark;
+  } else {
+    theme_setting = System;
+  }
 }
 
 float D2DOverlayWindow::get_overlay_opacity() {
@@ -389,7 +405,8 @@ void D2DOverlayWindow::init() {
     arrows[i].load(L"svgs\\" + std::to_wstring((i + 1) % 10) + L".svg", d2d_dc.get())
              .recolor(0x000000, colors.start_color_menu);
   }
-  if (!colors.light_mode) {
+  light_mode = (theme_setting == Light) || (theme_setting == System && colors.light_mode);
+  if (!light_mode) {
     landscape.recolor(0x222222, 0xDDDDDD);
     portrait.recolor(0x222222, 0xDDDDDD);
     for (auto& arrow : arrows) {
@@ -518,7 +535,7 @@ void D2DOverlayWindow::render(ID2D1DeviceContext5* d2d_dc) {
   // Draw background
   winrt::com_ptr<ID2D1SolidColorBrush> brush;
   float brush_opacity = get_overlay_opacity();
-  D2D1_COLOR_F brushColor = colors.light_mode ? D2D1::ColorF(1.0f, 1.0f, 1.0f, brush_opacity) : D2D1::ColorF(0, 0, 0, brush_opacity);
+  D2D1_COLOR_F brushColor = light_mode ? D2D1::ColorF(1.0f, 1.0f, 1.0f, brush_opacity) : D2D1::ColorF(0, 0, 0, brush_opacity);
   winrt::check_hresult(d2d_dc->CreateSolidColorBrush(brushColor, brush.put()));
   D2D1_RECT_F background_rect = {};
   background_rect.bottom = (float)window_height;
@@ -702,7 +719,7 @@ void D2DOverlayWindow::render(ID2D1DeviceContext5* d2d_dc) {
     down = L"No action";
     down_disabled = true;
   }
-  auto text_color = D2D1::ColorF(colors.light_mode ? 0x222222 : 0xDDDDDD, minature_shown || window_state == MINIMIZED ? 1.0f : 0.3f);
+  auto text_color = D2D1::ColorF(light_mode ? 0x222222 : 0xDDDDDD, minature_shown || window_state == MINIMIZED ? 1.0f : 0.3f);
   use_overlay->find_element(L"KeyUpGroup")->SetAttributeValue(L"fill-opacity", up_disabled ? 0.3f : 1.0f);
   text.set_aligment_center().write(d2d_dc, text_color, use_overlay->get_maximize_label(), up);
   use_overlay->find_element(L"KeyDownGroup")->SetAttributeValue(L"fill-opacity", down_disabled ? 0.3f : 1.0f);

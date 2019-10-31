@@ -77,17 +77,38 @@ IFACEMETHODIMP ZoneSet::RemoveZone(winrt::com_ptr<IZone> zone) noexcept
 
 IFACEMETHODIMP_(winrt::com_ptr<IZone>) ZoneSet::ZoneFromPoint(POINT pt) noexcept
 {
+    winrt::com_ptr<IZone> smallestKnownZone = nullptr;
+    // To reduce redundant calculations, we will store the last known zones area.
+    int smallestKnownZoneArea = INT32_MAX;
     for (auto iter = m_zones.begin(); iter != m_zones.end(); iter++)
     {
         if (winrt::com_ptr<IZone> zone = iter->try_as<IZone>())
         {
-            if (PtInRect(&zone->GetZoneRect(), pt))
+            RECT* newZoneRect = &zone->GetZoneRect();
+            if (PtInRect(newZoneRect, pt))
             {
-                return zone;
+                if (smallestKnownZone == nullptr)
+                {
+                    smallestKnownZone = zone;
+
+                    RECT* r = &smallestKnownZone->GetZoneRect();
+                    smallestKnownZoneArea = (r->right-r->left)*(r->bottom-r->top);
+                }
+                else
+                {
+                    int newZoneArea = (newZoneRect->right-newZoneRect->left)*(newZoneRect->bottom-newZoneRect->top);
+
+                    if (newZoneArea<smallestKnownZoneArea)
+                    {
+                        smallestKnownZone = zone;
+                        newZoneArea = smallestKnownZoneArea;
+                    }
+                }
             }
         }
     }
-    return nullptr;
+
+    return smallestKnownZone;
 }
 
 IFACEMETHODIMP_(winrt::com_ptr<IZone>) ZoneSet::ZoneFromWindow(HWND window) noexcept
@@ -249,10 +270,6 @@ IFACEMETHODIMP_(void) ZoneSet::MoveSizeEnd(HWND window, HWND zoneWindow, POINT p
     if (auto zone = ZoneFromPoint(ptClient))
     {
         zone->AddWindowToZone(window, zoneWindow, true);
-
-        POINT pointAdjustedScreen = ptClient;
-        MapWindowPoints(zoneWindow, nullptr, &pointAdjustedScreen, 1);
-        SetCursorPos(pointAdjustedScreen.x, pointAdjustedScreen.y);
     }
 }
 

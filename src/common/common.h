@@ -37,3 +37,16 @@ enum WindowState {
   RESTORED
 };
 WindowState get_window_state(HWND hwnd);
+
+// Returns true if the current process is running with elevated privileges
+bool is_process_elevated();
+
+// Drops the elevated privilages if present
+bool drop_elevated_privileges();
+
+// Get the executable path or module name for modern apps
+std::wstring get_process_path(DWORD pid) noexcept;
+// Get the executable path or module name for modern apps
+std::wstring get_process_path(HWND hwnd) noexcept;
+
+std::wstring get_product_version();
